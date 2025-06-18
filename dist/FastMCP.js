@@ -1081,6 +1081,7 @@ var FastMCP = class extends FastMCPEventEmitter {
           }
           return new FastMCPSession({
             auth,
+            log: this.#log,
             name: this.#options.name,
             ping: this.#options.ping,
             prompts: this.#prompts,
