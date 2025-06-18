@@ -668,8 +668,10 @@ export class FastMCPSession<
   #capabilities: ServerCapabilities = {};
   #clientCapabilities?: ClientCapabilities;
   #connectionState: "closed" | "connecting" | "error" | "ready" = "connecting";
+  #log: MyLogFn | undefined;
   #loggingLevel: LoggingLevel = "info";
   #needsEventLoopFlush: boolean = false;
+
   #pingConfig?: ServerOptions<T>["ping"];
 
   #pingInterval: null | ReturnType<typeof setInterval> = null;
@@ -683,12 +685,12 @@ export class FastMCPSession<
   #roots: Root[] = [];
 
   #rootsConfig?: ServerOptions<T>["roots"];
-
   #server: Server;
 
   constructor({
     auth,
     instructions,
+    log,
     name,
     ping,
     prompts,
@@ -701,6 +703,7 @@ export class FastMCPSession<
   }: {
     auth?: T;
     instructions?: string;
+    log?: MyLogFn;
     name: string;
     ping?: ServerOptions<T>["ping"];
     prompts: Prompt[];
@@ -717,6 +720,7 @@ export class FastMCPSession<
     this.#pingConfig = ping;
     this.#rootsConfig = roots;
     this.#needsEventLoopFlush = transportType === "httpStream";
+    this.#log = log;
 
     if (tools.length) {
       this.#capabilities.tools = {};
@@ -1019,6 +1023,12 @@ export class FastMCPSession<
     };
 
     this.#resourceTemplates.push(resourceTemplate);
+  }
+
+  private log(...args: Parameters<MyLogFn>) {
+    if (this.#log) {
+      this.#log(...args);
+    }
   }
 
   private setupCompleteHandlers() {
@@ -1376,6 +1386,11 @@ export class FastMCPSession<
         );
 
         if (parsed.issues) {
+          this.log(
+            "error",
+            `tool:${request.params.name}: Parameters validation failed`,
+            parsed.issues,
+          );
           const friendlyErrors = parsed.issues
             .map((issue) => {
               const path = issue.path?.join(".") || "root";
@@ -1568,6 +1583,12 @@ const FastMCPEventEmitterBase: {
 
 type Authenticate<T> = (request: http.IncomingMessage) => Promise<T>;
 
+type MyLogFn = (
+  level: "debug" | "error" | "info" | "warn",
+  message: string,
+  data: unknown,
+) => void;
+
 class FastMCPEventEmitter extends FastMCPEventEmitterBase {}
 
 export class FastMCP<
@@ -1578,19 +1599,21 @@ export class FastMCP<
   }
   #authenticate: Authenticate<T> | undefined;
   #httpStreamServer: null | SSEServer = null;
+  #log: MyLogFn | undefined;
   #options: ServerOptions<T>;
   #prompts: InputPrompt[] = [];
   #resources: Resource[] = [];
   #resourcesTemplates: InputResourceTemplate[] = [];
-  #sessions: FastMCPSession<T>[] = [];
 
+  #sessions: FastMCPSession<T>[] = [];
   #tools: Tool<T>[] = [];
 
-  constructor(public options: ServerOptions<T>) {
+  constructor(public options: { log?: MyLogFn } & ServerOptions<T>) {
     super();
 
     this.#options = options;
     this.#authenticate = options.authenticate;
+    this.#log = options.log;
   }
 
   /**
@@ -1725,6 +1748,7 @@ export class FastMCP<
 
       const session = new FastMCPSession<T>({
         instructions: this.#options.instructions,
+        log: this.#log,
         name: this.#options.name,
         ping: this.#options.ping,
         prompts: this.#prompts,
