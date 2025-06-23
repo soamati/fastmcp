@@ -1734,18 +1734,15 @@ export class FastMCP<
    * Starts the server.
    */
   public async start(
-    options:
-      | {
-          httpStream: { endpoint?: `/${string}`; port: number };
-          transportType: "httpStream";
-        }
-      | { transportType: "stdio" } = {
-      transportType: "stdio",
-    },
+    options?: Partial<{
+      httpStream: { endpoint?: `/${string}`; port: number };
+      transportType: "httpStream" | "stdio";
+    }>,
   ) {
-    if (options.transportType === "stdio") {
-      const transport = new StdioServerTransport();
+    const config = this.#parseRuntimeConfig(options);
 
+    if (config.transportType === "stdio") {
+      const transport = new StdioServerTransport();
       const session = new FastMCPSession<T>({
         instructions: this.#options.instructions,
         log: this.#log,
@@ -1767,7 +1764,9 @@ export class FastMCP<
       this.emit("connect", {
         session,
       });
-    } else if (options.transportType === "httpStream") {
+    } else if (config.transportType === "httpStream") {
+      const httpConfig = config.httpStream;
+
       this.#httpStreamServer = await startHTTPServer<FastMCPSession<T>>({
         createServer: async (request) => {
           let auth: T | undefined;
@@ -1798,6 +1797,8 @@ export class FastMCP<
         onConnect: async (session) => {
           this.#sessions.push(session);
 
+          console.info(`[FastMCP info] HTTP Stream session established`);
+
           this.emit("connect", {
             session,
           });
@@ -1818,7 +1819,7 @@ export class FastMCP<
                   .writeHead(healthConfig.status ?? 200, {
                     "Content-Type": "text/plain",
                   })
-                  .end(healthConfig.message ?? "ok");
+                  .end(healthConfig.message ?? "✓ Ok");
 
                 return;
               }
@@ -1858,12 +1859,16 @@ export class FastMCP<
           // If the request was not handled above, return 404
           res.writeHead(404).end();
         },
-        port: options.httpStream.port,
-        streamEndpoint: options.httpStream.endpoint ?? "/mcp",
+
+        port: httpConfig.port,
+        streamEndpoint: httpConfig.endpoint,
       });
 
       console.info(
-        `[FastMCP info] server is running on HTTP Stream at http://localhost:${options.httpStream.port}/mcp`,
+        `[FastMCP info] server is running on HTTP Stream at http://localhost:${httpConfig.port}${httpConfig.endpoint}`,
+      );
+      console.info(
+        `[FastMCP info] Transport type: httpStream (Streamable HTTP, not SSE)`,
       );
     } else {
       throw new Error("Invalid transport type");
@@ -1877,6 +1882,57 @@ export class FastMCP<
     if (this.#httpStreamServer) {
       await this.#httpStreamServer.close();
     }
+  }
+
+  #parseRuntimeConfig(
+    overrides?: Partial<{
+      httpStream: { endpoint?: `/${string}`; port: number };
+      transportType: "httpStream" | "stdio";
+    }>,
+  ):
+    | {
+        httpStream: { endpoint: `/${string}`; port: number };
+        transportType: "httpStream";
+      }
+    | { transportType: "stdio" } {
+    const args = process.argv.slice(2);
+    const getArg = (name: string) => {
+      const index = args.findIndex((arg) => arg === `--${name}`);
+
+      return index !== -1 && index + 1 < args.length
+        ? args[index + 1]
+        : undefined;
+    };
+
+    const transportArg = getArg("transport");
+    const portArg = getArg("port");
+    const endpointArg = getArg("endpoint");
+
+    const envTransport = process.env.FASTMCP_TRANSPORT;
+    const envPort = process.env.FASTMCP_PORT;
+    const envEndpoint = process.env.FASTMCP_ENDPOINT;
+
+    // Overrides > CLI > env > defaults
+    const transportType =
+      overrides?.transportType ||
+      (transportArg === "http-stream" ? "httpStream" : transportArg) ||
+      envTransport ||
+      "stdio";
+
+    if (transportType === "httpStream") {
+      const port = parseInt(
+        overrides?.httpStream?.port?.toString() || portArg || envPort || "8080",
+      );
+      const endpoint =
+        overrides?.httpStream?.endpoint || endpointArg || envEndpoint || "/mcp";
+
+      return {
+        httpStream: { endpoint: endpoint as `/${string}`, port },
+        transportType: "httpStream" as const,
+      };
+    }
+
+    return { transportType: "stdio" as const };
   }
 }
 
