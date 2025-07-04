@@ -1917,6 +1917,7 @@ export class FastMCP<
 
           return new FastMCPSession<T>({
             auth,
+            log: this.#log,
             name: this.#options.name,
             ping: this.#options.ping,
             prompts: this.#prompts,
