@@ -744,8 +744,6 @@ const FastMCPSessionEventEmitterBase: {
   new (): StrictEventEmitter<EventEmitter, FastMCPSessionEvents>;
 } = EventEmitter;
 
-type Authenticate<T> = (request: http.IncomingMessage) => Promise<T>;
-
 type FastMCPSessionAuth = Record<string, unknown> | undefined;
 
 class FastMCPSessionEventEmitter extends FastMCPSessionEventEmitterBase {}
@@ -1743,8 +1741,6 @@ export class FastMCP<
   #prompts: InputPrompt<T>[] = [];
   #resources: Resource<T>[] = [];
   #resourcesTemplates: InputResourceTemplate<T>[] = [];
-  #sessions: FastMCPSession<T>[] = [];
-
   #sessions: FastMCPSession<T>[] = [];
   #tools: Tool<T>[] = [];
 
