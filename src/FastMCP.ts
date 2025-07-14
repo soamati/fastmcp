@@ -2114,6 +2114,7 @@ export class FastMCP<
 }
 
 export type {
+  AudioContent,
   Content,
   ContentResult,
   Context,
@@ -2127,6 +2128,7 @@ export type {
   Prompt,
   PromptArgument,
   Resource,
+  ResourceContent,
   ResourceLink,
   ResourceResult,
   ResourceTemplate,
